@@ -4,8 +4,8 @@ Bunk Budget notifier.
 
 Spawns the real @newtonschool/newton-mcp server over stdio (the same
 official tool used inside Claude), pulls attendance data, computes
-lecture+lab combined attendance per subject, and pushes a summary to
-an ntfy.sh topic. Runs headless in CI, no Claude/laptop required.
+lecture+lab combined attendance per subject, and sends a summary via
+Telegram. Runs headless in CI, no Claude/laptop required.
 """
 
 import json
@@ -16,7 +16,6 @@ import threading
 import urllib.request
 import itertools
 
-THRESHOLD = 75.0
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
@@ -137,15 +136,6 @@ def pair_subjects(subjects):
     return list(groups.values())
 
 
-def budget(attended, total, threshold_frac):
-    max_miss = attended / threshold_frac - total
-    if max_miss >= 0:
-        return int(max_miss)
-    import math
-    needed = math.ceil((threshold_frac * total - attended) / (1 - threshold_frac))
-    return -needed
-
-
 def main():
     env = os.environ.copy()
     client = MCPClient(["npx", "-y", "@newtonschool/newton-mcp@latest"])
@@ -166,10 +156,8 @@ def main():
         overall_a, overall_t = perf["lectures_attended"], perf["total_lectures"]
 
         pairs = pair_subjects(course["subjects"])
-        threshold_frac = THRESHOLD / 100
 
         lines = []
-        worst = []
         for p in pairs:
             lec_a = lec_t = lab_a = lab_t = 0
             if p["lec"]:
@@ -182,21 +170,10 @@ def main():
             if t == 0:
                 continue
             pct = a / t * 100
-            b = budget(a, t, threshold_frac)
-            if b < 0:
-                lines.append(f"{p['name']} {pct:.0f}% (attend next {-b} straight)")
-                worst.append((pct, p["name"]))
-            elif b == 0:
-                lines.append(f"{p['name']} {pct:.0f}% (no room to skip)")
-                worst.append((pct, p["name"]))
+            lines.append(f"{p['name']}: {pct:.0f}%")
 
         overall_pct = overall_a / overall_t * 100 if overall_t else 0
-        title = f"Bunk Budget: {overall_pct:.1f}% overall"
-        if lines:
-            body = " | ".join(lines[:3])
-        else:
-            body = "All subjects healthy, room to spare."
-        message = f"\U0001F4CB {title}\n{body}"[:1000]
+        message = f"Overall: {overall_pct:.1f}%\n" + "\n".join(lines)
 
         send_telegram(message)
     finally:
