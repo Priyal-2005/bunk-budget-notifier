@@ -55,7 +55,7 @@ class MCPClient:
         self.proc.stdin.write(json.dumps(payload) + "\n")
         self.proc.stdin.flush()
 
-    def _wait(self, msg_id, timeout=30):
+    def _wait(self, msg_id, timeout=120):
         import time
         start = time.time()
         while time.time() - start < timeout:
@@ -65,10 +65,14 @@ class MCPClient:
             time.sleep(0.05)
         raise TimeoutError(f"MCP server did not respond to request {msg_id} in time")
 
-    def request(self, method, params=None):
+    def request(self, method, params=None, timeout=120):
         msg_id = next(_id_counter)
         self._send({"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params or {}})
-        resp = self._wait(msg_id)
+        try:
+            resp = self._wait(msg_id, timeout=timeout)
+        except TimeoutError:
+            alive = self.proc.poll() is None
+            raise TimeoutError(f"MCP server did not respond to {method} in time (process alive={alive})")
         if "error" in resp:
             raise RuntimeError(f"MCP error on {method}: {resp['error']}")
         return resp.get("result")
