@@ -166,6 +166,7 @@ def main():
         overview = client.call_tool("get_course_overview", {"course_hash": primary_hash})
         perf = overview["performance"]
         overall_a, overall_t = perf["lectures_attended"], perf["total_lectures"]
+        assign_done, assign_total = perf["completed_assignment_questions"], perf["total_assignment_questions"]
 
         pairs = pair_subjects(course["subjects"])
 
@@ -185,7 +186,8 @@ def main():
             lines.append(f"{p['name']}: {pct:.0f}%")
 
         overall_pct = overall_a / overall_t * 100 if overall_t else 0
-        message = f"Overall: {overall_pct:.1f}%\n" + "\n".join(lines)
+        assign_pct = assign_done / assign_total * 100 if assign_total else 0
+        message = f"Overall: {overall_pct:.1f}%\n" + "\n".join(lines) + f"\nAssignments: {assign_pct:.0f}%"
 
         send_telegram(message)
     finally:
