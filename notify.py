@@ -148,6 +148,28 @@ def pair_subjects(subjects):
     return list(groups.values())
 
 
+def get_deadline_reminders(client, course_hash):
+    import datetime
+    data = client.call_tool("get_assignments", {"course_hash": course_hash})
+    items = data.get("assignments", []) + data.get("contests", [])
+
+    now_ms = datetime.datetime.now(datetime.timezone.utc).timestamp() * 1000
+    window_ms = 24 * 60 * 60 * 1000
+    ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+
+    due_soon = [item for item in items if 0 < (item["end_timestamp"] - now_ms) <= window_ms]
+    due_soon.sort(key=lambda i: i["end_timestamp"])
+
+    lines = []
+    for item in due_soon:
+        due_local = datetime.datetime.fromtimestamp(item["end_timestamp"] / 1000, tz=ist)
+        title = item["title"]
+        if len(title) > 50:
+            title = title[:47] + "..."
+        lines.append(f"{item['subject_name']}: {title} (by {due_local.strftime('%I:%M %p')})")
+    return lines
+
+
 def main():
     env = os.environ.copy()
     client = MCPClient(["npx", "-y", "@newtonschool/newton-mcp@latest"])
@@ -190,6 +212,11 @@ def main():
         message = f"Overall: {overall_pct:.1f}%\n" + "\n".join(lines) + f"\nAssignments: {assign_pct:.0f}%"
         if assign_pct <= 75:
             message += "\n\nYou're almost at 100% assignments, just a few more to go!"
+
+        if os.environ.get("CHECK_DEADLINES") == "true":
+            deadline_lines = get_deadline_reminders(client, primary_hash)
+            if deadline_lines:
+                message += "\n\nDue in next 24h:\n" + "\n".join(deadline_lines)
 
         send_telegram(message)
     finally:

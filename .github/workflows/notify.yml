@@ -32,4 +32,5 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CHECK_DEADLINES: ${{ (github.event.schedule == '30 2 * * *' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
         run: python3 notify.py
