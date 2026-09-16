@@ -93,16 +93,28 @@ class MCPClient:
     def notify(self, method, params=None):
         self._send({"jsonrpc": "2.0", "method": method, "params": params or {}})
 
-    def call_tool(self, name, arguments=None):
-        result = self.request("tools/call", {"name": name, "arguments": arguments or {}})
-        if result.get("isError"):
-            raise RuntimeError(f"Tool {name} failed: {result}")
-        content = result.get("content", [])
-        text = "".join(c.get("text", "") for c in content if c.get("type") == "text")
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return text
+    def call_tool(self, name, arguments=None, retries=4):
+        import time
+        last_err = None
+        for attempt in range(retries):
+            if attempt > 0:
+                time.sleep(5 * (2 ** (attempt - 1)))  # 5s, 10s, 20s backoff
+            try:
+                result = self.request("tools/call", {"name": name, "arguments": arguments or {}})
+                if result.get("isError"):
+                    raise RuntimeError(f"Tool {name} failed: {result}")
+                content = result.get("content", [])
+                text = "".join(c.get("text", "") for c in content if c.get("type") == "text")
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError:
+                    return text
+            except RuntimeError as e:
+                last_err = e
+                if "403" not in str(e) and "429" not in str(e):
+                    raise  # not a retryable transient error
+                print(f"Transient error on {name} (attempt {attempt + 1}/{retries}): {e}", file=sys.stderr)
+        raise last_err
 
     def close(self):
         try:
