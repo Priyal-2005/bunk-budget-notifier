@@ -188,6 +188,8 @@ def main():
         overall_pct = overall_a / overall_t * 100 if overall_t else 0
         assign_pct = assign_done / assign_total * 100 if assign_total else 0
         message = f"Overall: {overall_pct:.1f}%\n" + "\n".join(lines) + f"\nAssignments: {assign_pct:.0f}%"
+        if assign_pct <= 75:
+            message += "\n\nYou're almost at 100% assignments, just a few more to go!"
 
         send_telegram(message)
     finally:
