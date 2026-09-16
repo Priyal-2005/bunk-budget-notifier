@@ -17,7 +17,8 @@ import urllib.request
 import itertools
 
 THRESHOLD = 75.0
-NTFY_TOPIC = os.environ["NTFY_TOPIC"]
+TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
 _id_counter = itertools.count(1)
 
@@ -195,19 +196,18 @@ def main():
             body = " | ".join(lines[:3])
         else:
             body = "All subjects healthy, room to spare."
-        message = f"{title}. {body}"[:196]
+        message = f"\U0001F4CB {title}\n{body}"[:1000]
 
-        send_ntfy(message, title="Bunk Budget")
+        send_telegram(message)
     finally:
         client.close()
 
 
-def send_ntfy(message, title=None):
-    url = f"https://ntfy.sh/{NTFY_TOPIC}"
-    req = urllib.request.Request(url, data=message.encode("utf-8"), method="POST")
-    if title:
-        req.add_header("Title", title)
-    req.add_header("Tags", "bar_chart")
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": message}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, method="POST")
+    req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req, timeout=15) as resp:
         resp.read()
 
