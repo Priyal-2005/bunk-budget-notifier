@@ -33,9 +33,12 @@ class MCPClient:
             bufsize=1,
         )
         self._pending = {}
+        self._stderr_lines = []
         self._lock = threading.Lock()
         self._reader = threading.Thread(target=self._read_loop, daemon=True)
         self._reader.start()
+        self._err_reader = threading.Thread(target=self._read_stderr, daemon=True)
+        self._err_reader.start()
 
     def _read_loop(self):
         for line in self.proc.stdout:
@@ -51,6 +54,11 @@ class MCPClient:
                 with self._lock:
                     self._pending[msg_id] = msg
 
+    def _read_stderr(self):
+        for line in self.proc.stderr:
+            with self._lock:
+                self._stderr_lines.append(line.rstrip())
+
     def _send(self, payload):
         self.proc.stdin.write(json.dumps(payload) + "\n")
         self.proc.stdin.flush()
@@ -62,17 +70,22 @@ class MCPClient:
             with self._lock:
                 if msg_id in self._pending:
                     return self._pending.pop(msg_id)
+            if self.proc.poll() is not None:
+                # process exited before answering — no point waiting out the timeout
+                break
             time.sleep(0.05)
-        raise TimeoutError(f"MCP server did not respond to request {msg_id} in time")
+        with self._lock:
+            stderr_tail = "\n".join(self._stderr_lines[-40:])
+        raise TimeoutError(
+            f"MCP server did not respond to request {msg_id} in time "
+            f"(process exited={self.proc.poll() is not None}, exit_code={self.proc.poll()}). "
+            f"stderr:\n{stderr_tail}"
+        )
 
     def request(self, method, params=None, timeout=120):
         msg_id = next(_id_counter)
         self._send({"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params or {}})
-        try:
-            resp = self._wait(msg_id, timeout=timeout)
-        except TimeoutError:
-            alive = self.proc.poll() is None
-            raise TimeoutError(f"MCP server did not respond to {method} in time (process alive={alive})")
+        resp = self._wait(msg_id, timeout=timeout)
         if "error" in resp:
             raise RuntimeError(f"MCP error on {method}: {resp['error']}")
         return resp.get("result")
