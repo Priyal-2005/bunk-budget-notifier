@@ -1,0 +1,33 @@
+name: Bunk Budget notify
+
+on:
+  schedule:
+    - cron: '35 17 * * *'  # 23:05 IST daily
+  workflow_dispatch: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Restore Newton credentials
+        run: |
+          mkdir -p "$HOME/.newton-mcp"
+          printf '%s' "$NEWTON_CREDENTIALS_JSON" > "$HOME/.newton-mcp/credentials.json"
+          chmod 600 "$HOME/.newton-mcp/credentials.json"
+        env:
+          NEWTON_CREDENTIALS_JSON: ${{ secrets.NEWTON_CREDENTIALS_JSON }}
+
+      - name: Run notifier
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python3 notify.py
