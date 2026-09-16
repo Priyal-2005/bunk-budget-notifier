@@ -2,7 +2,8 @@ name: Bunk Budget notify
 
 on:
   schedule:
-    - cron: '35 17 * * *'  # 23:05 IST daily
+    - cron: '33 2 * * *'   # 08:03 IST daily
+    - cron: '34 17 * * *'  # 23:04 IST daily
   workflow_dispatch: {}
 
 jobs:
