@@ -93,12 +93,13 @@ class MCPClient:
     def notify(self, method, params=None):
         self._send({"jsonrpc": "2.0", "method": method, "params": params or {}})
 
-    def call_tool(self, name, arguments=None, retries=4):
-        import time
+    def call_tool(self, name, arguments=None, retries=6):
+        import time, random
         last_err = None
         for attempt in range(retries):
             if attempt > 0:
-                time.sleep(5 * (2 ** (attempt - 1)))  # 5s, 10s, 20s backoff
+                delay = min(10 * (2 ** (attempt - 1)), 90)  # 10,20,40,80,90,90s
+                time.sleep(delay + random.uniform(0, 5))
             try:
                 result = self.request("tools/call", {"name": name, "arguments": arguments or {}})
                 if result.get("isError"):
