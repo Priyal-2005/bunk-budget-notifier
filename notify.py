@@ -171,7 +171,40 @@ def get_deadline_reminders(client, course_hash):
     return lines
 
 
+STATE_FILE = "state.json"
+
+
+def today_ist():
+    import datetime
+    ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    return datetime.datetime.now(tz=ist).strftime("%Y-%m-%d")
+
+
+def load_state():
+    try:
+        with open(STATE_FILE) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def mark_sent(slot):
+    state = load_state()
+    state[slot] = today_ist()
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f)
+
+
+def already_sent(slot):
+    return load_state().get(slot) == today_ist()
+
+
 def main():
+    slot = os.environ.get("SLOT")
+    if slot and already_sent(slot):
+        print(f"'{slot}' notification already sent today ({today_ist()}) — skipping.")
+        return
+
     env = os.environ.copy()
     client = MCPClient(["npx", "-y", "@newtonschool/newton-mcp@latest"])
     try:
@@ -220,6 +253,8 @@ def main():
                 message += "\n\nDue in next 24h:\n" + "\n".join(deadline_lines)
 
         send_telegram(message)
+        if slot:
+            mark_sent(slot)
     finally:
         client.close()
 

@@ -11,7 +11,14 @@ School, and sends you a Telegram message with:
   24 hours
 
 Fires daily at 8:00am and 11:00pm IST (`.github/workflows/notify.yml`
-— edit the cron lines to change the schedule; both are in UTC).
+— edit the cron lines to change the schedule; all times are in UTC).
+
+Newton's API occasionally 403s requests coming from shared CI runner
+IPs. Each run retries internally for ~5 minutes, and if a whole run
+still fails, two more attempts fire automatically 15 and 30 minutes
+later. `state.json` tracks which day's morning/evening notification
+already went out, so once one attempt succeeds the later fallback
+runs just skip silently instead of double-sending.
 
 ## Setup (for your own account)
 

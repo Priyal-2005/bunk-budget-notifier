@@ -2,15 +2,36 @@ name: Bunk Budget notify
 
 on:
   schedule:
-    - cron: '30 2 * * *'   # 08:00 IST daily
-    - cron: '30 17 * * *'  # 23:00 IST daily
+    # Morning slot: primary + two fallbacks in case Newton's API blocks the runner
+    - cron: '30 2 * * *'   # 08:00 IST
+    - cron: '45 2 * * *'   # 08:15 IST fallback
+    - cron: '0 3 * * *'    # 08:30 IST fallback
+    # Evening slot: primary + two fallbacks
+    - cron: '30 17 * * *'  # 23:00 IST
+    - cron: '45 17 * * *'  # 23:15 IST fallback
+    - cron: '0 18 * * *'   # 23:30 IST fallback
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   notify:
     runs-on: macos-14  # newton-mcp only ships a darwin/arm64 binary
     steps:
       - uses: actions/checkout@v4
+
+      - name: Determine slot
+        id: slot
+        run: |
+          case "${{ github.event.schedule }}" in
+            "30 2 * * *"|"45 2 * * *"|"0 3 * * *")
+              echo "slot=morning" >> "$GITHUB_ENV" ;;
+            "30 17 * * *"|"45 17 * * *"|"0 18 * * *")
+              echo "slot=evening" >> "$GITHUB_ENV" ;;
+            *)
+              echo "slot=" >> "$GITHUB_ENV" ;;
+          esac
 
       - uses: actions/setup-node@v4
         with:
@@ -32,5 +53,16 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          CHECK_DEADLINES: ${{ (github.event.schedule == '30 2 * * *' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
+          SLOT: ${{ env.slot }}
+          CHECK_DEADLINES: ${{ (env.slot == 'morning' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
         run: python3 notify.py
+
+      - name: Persist send state
+        run: |
+          if [ -n "$(git status --porcelain state.json 2>/dev/null)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add state.json
+            git commit -m "Record successful send [skip ci]"
+            git push
+          fi
