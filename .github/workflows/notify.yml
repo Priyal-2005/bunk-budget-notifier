@@ -46,8 +46,7 @@ jobs:
 
       - name: Run notifier
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           SLOT: ${{ env.slot }}
           CHECK_DEADLINES: ${{ (env.slot == 'morning' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
         run: python3 notify_http.py

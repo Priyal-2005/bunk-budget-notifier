@@ -31,8 +31,7 @@ SUBJECT_PAIRS = [
     ("MCA", "9c7mdl9t40hc", "iixgc703fkyv"),
 ]
 
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+NTFY_TOPIC = os.environ["NTFY_TOPIC"]
 
 
 def get_token():
@@ -92,11 +91,11 @@ def get_deadline_reminders(course_hash, token):
     return lines
 
 
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": message}).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, method="POST")
-    req.add_header("Content-Type", "application/json")
+def send_ntfy(message):
+    url = f"https://ntfy.sh/{NTFY_TOPIC}"
+    req = urllib.request.Request(url, data=message.encode("utf-8"), method="POST")
+    req.add_header("Title", "Bunk Budget")
+    req.add_header("Tags", "bar_chart")
     with urllib.request.urlopen(req, timeout=15) as resp:
         resp.read()
 
@@ -163,7 +162,7 @@ def main():
         if deadline_lines:
             message += "\n\nDue in next 24h:\n" + "\n".join(deadline_lines)
 
-    send_telegram(message)
+    send_ntfy(message)
     if slot:
         mark_sent(slot)
 
