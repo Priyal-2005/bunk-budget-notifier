@@ -1,100 +1,142 @@
 # Bunk Budget notifier
 
-Pulls your current semester's data from Newton School and sends an
-[ntfy](https://ntfy.sh) notification with:
+Pulls your current semester's data from Newton School and sends a
+Telegram message with:
 
 - Overall attendance %, plus each subject's lecture+lab combined %
 - Assignment completion % (with a nudge if it's at or below 75%)
 - On the morning run only: any assignments/contests due in the next
   24 hours
 
-## Recommended setup: your phone, via Termux (fully independent)
+Fires daily at 8:00am and 11:00pm IST.
 
-The most reliable free option is running `notify_http.py` on a real
-cron job **on your own phone**, using [Termux](https://f-droid.org/en/packages/com.termux/)
-(install from F-Droid, not Play Store). Your phone has a mobile/
-residential IP, not a datacenter one, so it isn't subject to the
-GitHub Actions issue below — and it doesn't depend on Claude, a
-laptop, or any subscription.
+## Setup for your own account
 
+All paths require the same initial setup:
+
+### 1. Get your Newton token
+On any machine with Node installed (Mac, Linux, or even Termux on Android):
 ```bash
-# In Termux:
+npx -y @newtonschool/newton-mcp@latest login
+```
+Approve the device-code prompt in your browser with *your own* Newton account. 
+Saves a token to `~/.newton-mcp/credentials.json`.
+
+### 2. Create a Telegram bot
+Message [@BotFather](https://t.me/BotFather) on Telegram:
+- Send `/newbot`
+- Save the bot token it gives you
+- Send your new bot any message (e.g. "hi")
+- Get your chat ID with:
+```bash
+curl -s "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates"
+```
+Look for `"id"` in the response — that's your chat ID.
+
+### 3. Pick your setup path
+
+---
+
+## Android (Termux) — Fully independent ⭐ Recommended
+
+No Claude Pro needed, no Mac needed, fully automatic.
+
+**Install:**
+1. Download **Termux** from [F-Droid](https://f-droid.org/en/packages/com.termux/) 
+   (not Play Store — that version is outdated)
+2. Open Termux and run:
+```bash
 pkg update -y && pkg upgrade -y
 pkg install -y python git nodejs cronie termux-services termux-api
+```
 
-# Get your own Newton token (opens a browser approval link)
-npx -y @newtonschool/newton-mcp@latest login
-
-git clone <this-repo-url>
+**Setup:**
+3. Get your Newton token (see step 1 above) and copy it to the phone
+4. Clone the repo:
+```bash
+git clone https://github.com/Priyal-2005/bunk-budget-notifier.git
 cd bunk-budget-notifier
+```
 
-# Pick your own private ntfy topic (anyone who knows it can read your
-# notifications) and subscribe to it in the ntfy app first
-cat > ~/.bunk-budget-env << 'EOF'
-export NTFY_TOPIC="<your-own-random-topic-name>"
-EOF
+5. Create your environment file:
+```bash
+cat > ~/.bunk-budget-env << 'ENVEOF'
+export TELEGRAM_BOT_TOKEN="<your-bot-token>"
+export TELEGRAM_CHAT_ID="<your-chat-id>"
+ENVEOF
+```
 
+6. Set up cron (this runs the script automatically at 8am/11pm):
+```bash
 sv-enable crond
 crontab -e
 ```
-Add:
+Add these two lines:
 ```
 0 8 * * * . ~/.bunk-budget-env && cd ~/bunk-budget-notifier && SLOT=morning CHECK_DEADLINES=true python3 notify_http.py >> ~/bunk-budget.log 2>&1
 0 23 * * * . ~/.bunk-budget-env && cd ~/bunk-budget-notifier && SLOT=evening python3 notify_http.py >> ~/bunk-budget.log 2>&1
 ```
+Save with `Ctrl+X`, `Y`, `Enter`.
 
-Then go to **Settings → Apps → Termux → Battery** and set it to
-**Unrestricted** — otherwise Android may silently kill the cron jobs
-in the background.
+7. **Important:** Go to **Settings → Apps → Termux → Battery** and set to 
+   **Unrestricted** (not "Optimized") — otherwise Android may kill the cron jobs.
 
-Test it anytime with:
+8. Test it:
 ```bash
-. ~/.bunk-budget-env && cd ~/bunk-budget-notifier && SLOT=test CHECK_DEADLINES=true python3 notify_http.py
+. ~/.bunk-budget-env && python3 notify_http.py
+```
+Should get a Telegram message immediately with your attendance data.
+
+---
+
+## iOS — Using Claude scheduled tasks (requires Claude Pro)
+
+No Termux equivalent exists for iOS.
+
+1. **Use this template** to create your own repo (top of the page,
+   "Use this template" → "Create a new repository").
+2. Get your Newton token (step 1 above).
+3. In Claude Code, open this repo and create two scheduled tasks:
+   - Morning: 8:00 AM IST, sends morning check + deadline reminders
+   - Evening: 11:00 PM IST, sends evening check
+   
+   Both send via Telegram using your bot token and chat ID.
+4. Keep the Claude app open around trigger time, or open it anytime that day 
+   (tasks catch up on next launch).
+
+**Trade-off:** Needs Claude Pro. Without it, the scheduled tasks won't run.
+
+---
+
+## Mac / Linux server — Full automation (like Android)
+
+Same as the Android Termux setup, just install on your Mac/Linux:
+```bash
+# macOS (using Homebrew)
+brew install python3 nodejs git
+
+# Then follow the Termux setup steps (clone repo, environment file, crontab, etc.)
 ```
 
-## GitHub Actions: known not to work for free right now
+Cron runs 24/7 on your machine, so notifications are fully automatic. No Claude needed.
 
-`.github/workflows/notify.yml` exists but its automatic schedule is
-**disabled**. Newton's API blocks requests from GitHub's shared
-runner IPs with a 403 — confirmed on both the macOS pool (running the
-official `@newtonschool/newton-mcp` binary, `notify.py`) and the
-Ubuntu pool (`notify_http.py`, a from-scratch client built by
-capturing and verifying the official tool's real traffic — see its
-docstring, not guessed). Both get blocked instantly with completely
-different request fingerprints, pointing to a network-level block on
-datacenter/CI IP ranges generally, not one tool or runner. Other free
-CI providers are likely to hit the same wall.
+---
 
-You can still trigger it manually (Actions tab → "Bunk Budget notify"
-→ "Run workflow") to check if that's ever changed — worth trying once
-before assuming you need Termux or a Claude-based fallback.
+## GitHub Actions — Manual testing only (not automatic)
 
-## Setup, step by step
+`.github/workflows/notify.yml` exists but is **not scheduled** — Newton's API blocks 
+requests from GitHub's datacenter IPs. You can still manually trigger it (Actions tab 
+→ "Bunk Budget notify" → "Run workflow") if you want to test from a CI environment, 
+but it's not reliable.
 
-1. **Use this template** to create your own repo (top of this page,
-   "Use this template" → "Create a new repository"). Public or
-   private both work — no secrets ever live in the code itself, only
-   in your own GitHub Actions secrets / local env files, which never
-   get committed.
+---
 
-2. **Get your Newton token.** On any machine with Node installed:
-   ```bash
-   npx -y @newtonschool/newton-mcp@latest login
-   ```
-   Approve the device-code prompt in your browser. This saves a
-   token to `~/.newton-mcp/credentials.json`.
+## Notes
 
-3. **Pick an ntfy topic** — install the [ntfy app](https://ntfy.sh)
-   (iOS or Android) and subscribe to a topic name only you know (a
-   random string works well — anyone who knows the name can read
-   notifications sent to it).
-
-4. **Run it** — either via Termux on your phone (see above,
-   recommended), or via GitHub Actions manually: set repo secrets
-   `NEWTON_CREDENTIALS_JSON` (contents of `~/.newton-mcp/credentials.json`)
-   and `NTFY_TOPIC`, then Actions tab → "Bunk Budget notify" → "Run workflow".
-
-5. **`notify_http.py`** hardcodes the current semester's course/subject
-   hashes (`COURSE_HASH`, `SUBJECT_PAIRS` near the top) — update these
-   each semester. Ask Claude (with the Newton MCP server connected) to
-   call `list_courses` and give you the new values.
+- **Course/subject hashes** in `notify_http.py` are hardcoded for the current semester 
+  (`COURSE_HASH`, `SUBJECT_PAIRS` near the top). Update these each semester by asking 
+  Claude to call `mcp__newton__list_courses`.
+- Each person gets their own Telegram bot and Newton token — they're never shared 
+  across users.
+- The repo is public; no secrets ever get committed, only environment variables on 
+  each device.
