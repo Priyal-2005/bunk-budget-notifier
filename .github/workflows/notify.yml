@@ -1,16 +1,15 @@
 name: Bunk Budget notify
 
-# Runs on ubuntu-latest with a pure-HTTP client (notify_http.py), not
-# the official npx binary — that binary only ships for darwin/arm64,
-# forcing macos-14 runners, and Newton's API was durably blocking
-# requests from that specific runner pool. The HTTP client was built
-# by capturing and verifying the official tool's real traffic (not
-# guessed), and Ubuntu runners are a much larger, different IP pool —
-# worth testing whether that dodges the block.
+# Automatic `schedule` triggers are disabled. Confirmed both GitHub's
+# macOS and Ubuntu runner pools get blocked by Newton's API (403,
+# instantly, even with completely different request fingerprints —
+# the official npx binary vs. this repo's own pure-HTTP client). This
+# points to a network-level block on datacenter/CI IP ranges broadly,
+# not something specific to one runner pool or client. A Claude
+# scheduled task (not tied to a flagged IP range) is the real primary
+# now. This workflow is kept for manual testing only, in case the
+# block situation changes.
 on:
-  schedule:
-    - cron: '30 2 * * *'   # 08:00 IST
-    - cron: '30 17 * * *'  # 23:00 IST
   workflow_dispatch: {}
 
 permissions:

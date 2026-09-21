@@ -1,32 +1,44 @@
 # Bunk Budget notifier
 
-Runs entirely on GitHub Actions — no laptop, phone app, or Claude
-needs to be open. It spawns the official `@newtonschool/newton-mcp`
-server over stdio, pulls your current semester's data from Newton
-School, and sends you a Telegram message with:
+Pulls your current semester's data from Newton School and sends a
+Telegram message with:
 
 - Overall attendance %, plus each subject's lecture+lab combined %
 - Assignment completion % (with a nudge if it's at or below 75%)
 - On the morning run only: any assignments/contests due in the next
   24 hours
 
-Fires daily at 8:00am and 11:00pm IST (`.github/workflows/notify.yml`
-— edit the cron lines to change the schedule; all times are in UTC).
+## Current status: not fully automatable for free
 
-Newton's API occasionally 403s requests coming from shared CI runner
-IPs. Each run retries internally for ~5 minutes, and if a whole run
-still fails, two more attempts fire automatically 15 and 30 minutes
-later. `state.json` tracks which day's morning/evening notification
-already went out, so once one attempt succeeds the later fallback
-runs just skip silently instead of double-sending.
+This was designed to run entirely on GitHub Actions, no device
+needed. In practice, Newton's API blocks requests from GitHub's
+shared runner IPs with a 403 — confirmed on **both** the macOS pool
+(running the official `@newtonschool/newton-mcp` binary, `notify.py`)
+and the Ubuntu pool (a from-scratch pure-HTTP client, `notify_http.py`,
+built by capturing and verifying the official tool's real traffic —
+see its docstring). Both get blocked instantly, with completely
+different request fingerprints, which points to a network-level block
+on datacenter/CI IP ranges rather than anything specific to one tool
+or runner. Other free CI providers are likely to hit the same wall
+for the same reason.
+
+`.github/workflows/notify.yml` is kept for **manual testing only**
+(`workflow_dispatch`) in case that ever changes — it is not scheduled
+to run automatically. The reliable path right now is a scheduled task
+running inside Claude (not tied to a flagged IP range), which needs
+the Claude app open around trigger time (or opened at some point that
+day — it catches up on next launch).
+
+If you have an always-on machine with a non-datacenter IP (e.g. a
+home server, a Raspberry Pi), running `notify_http.py` there on a
+real cron job would sidestep this entirely — no Claude dependency.
 
 ## Setup (for your own account)
 
 1. **Use this template** to create your own repo (top of this page,
    "Use this template" → "Create a new repository"). Keep it private.
 
-2. **Get your Newton token.** On any Mac/Linux machine with Node
-   installed:
+2. **Get your Newton token.** On any machine with Node installed:
    ```bash
    npx -y @newtonschool/newton-mcp@latest login
    ```
@@ -49,6 +61,9 @@ runs just skip silently instead of double-sending.
    - `TELEGRAM_CHAT_ID` — your chat ID from step 3
 
 5. **Test it**: Actions tab → "Bunk Budget notify" → "Run workflow".
+   If your network isn't in a blocked range, this alone might just
+   work — worth trying before assuming you need the Claude fallback.
 
-That's it — it'll run on schedule from then on, independent of any
-device you own.
+6. **`notify_http.py`** hardcodes the current semester's course/subject
+   hashes (`COURSE_HASH`, `SUBJECT_PAIRS` near the top) — update these
+   each semester using `list_courses` via Claude or the MCP server.
