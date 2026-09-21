@@ -1,13 +1,16 @@
 name: Bunk Budget notify
 
-# Automatic `schedule` triggers are disabled: Newton's API has been
-# durably blocking requests from GitHub's shared runner IPs (~45%+
-# failure rate, persisting even after hours of cooldown), while a
-# direct connection from a home network hits 0% failures. A local
-# Claude scheduled task is the primary path now; this workflow stays
-# available for manual testing (workflow_dispatch) in case GitHub's
-# IP situation improves.
+# Runs on ubuntu-latest with a pure-HTTP client (notify_http.py), not
+# the official npx binary — that binary only ships for darwin/arm64,
+# forcing macos-14 runners, and Newton's API was durably blocking
+# requests from that specific runner pool. The HTTP client was built
+# by capturing and verifying the official tool's real traffic (not
+# guessed), and Ubuntu runners are a much larger, different IP pool —
+# worth testing whether that dodges the block.
 on:
+  schedule:
+    - cron: '30 2 * * *'   # 08:00 IST
+    - cron: '30 17 * * *'  # 23:00 IST
   workflow_dispatch: {}
 
 permissions:
@@ -15,25 +18,20 @@ permissions:
 
 jobs:
   notify:
-    runs-on: macos-14  # newton-mcp only ships a darwin/arm64 binary
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Determine slot
-        id: slot
         run: |
           case "${{ github.event.schedule }}" in
-            "30 2 * * *"|"45 2 * * *"|"0 3 * * *")
+            "30 2 * * *")
               echo "slot=morning" >> "$GITHUB_ENV" ;;
-            "30 17 * * *"|"45 17 * * *"|"0 18 * * *")
+            "30 17 * * *")
               echo "slot=evening" >> "$GITHUB_ENV" ;;
             *)
               echo "slot=" >> "$GITHUB_ENV" ;;
           esac
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
 
       - uses: actions/setup-python@v5
         with:
@@ -53,7 +51,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SLOT: ${{ env.slot }}
           CHECK_DEADLINES: ${{ (env.slot == 'morning' || github.event_name == 'workflow_dispatch') && 'true' || 'false' }}
-        run: python3 notify.py
+        run: python3 notify_http.py
 
       - name: Persist send state
         run: |
